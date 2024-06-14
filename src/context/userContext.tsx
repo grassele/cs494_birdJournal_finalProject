@@ -21,10 +21,11 @@ import getBirdsFromJsonFile from '@/app/fileInteraction';
 
 
 export type Bird = {
+    userId: string,
     primaryCommonName: string,
     scientificName: string,
     regions: string[],
-    spotted: boolean
+    // spotted: boolean
 }
 
 // // use scientific name as key
@@ -35,7 +36,7 @@ export type Bird = {
 const UserContext = createContext<
     {
         user: User | null;
-        userBirds: Bird[]; // BirdDictionary;
+        userBirds: Bird[] | null; // BirdDictionary;
     }
     | undefined
 >(undefined);
@@ -43,40 +44,36 @@ const UserContext = createContext<
 
 export function UserContextProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [userBirds, setUserBirds] = useState<Bird[]>([]);
+    const [userBirds, setUserBirds] = useState<Bird[] | null>(null);
 
-    // function saveUserSettings(newDetails: UserSettings) {
-    //     console.log(user);
-    //     console.log(userSettings);
-
-    //     // the user should never be null at this point because of conditional rendering
-    //     // but we add a null check to make typescript happy
-    //     if (user != null) {
-    //         console.log('setting user settings');
-    //         // the id for UserSettings object is uid of User object
-    //         setUserSettings({
-    //             id: user.uid,
-    //             occupation: newDetails.occupation,
-    //             organization: newDetails.organization,
-    //             linkedin: newDetails.linkedin,
-    //             github: newDetails.github
-    //         });
-    //     } else {
-    //         console.log('no user to log settings for')
-    //     }
-    // }
-
-    // // this will trigger when userSettings are updated, attempts to write the updated user settings to the database
-    // useEffect(() => {
-    //     console.log('userContext.useEffect upon userSettings change')
-    //     if (userSettings != null) {
-    //         console.log(`userContext.useEffect ACTUALLY writing user settings`);
-    //         writeUserSettings(userSettings);
-    //     }
-    // }, [userSettings]);
+    // // this will trigger when userBirds are updated, attempts to write the updated user birds to the database
+    useEffect(() => {
+        if (userBirds) {
+            console.log('userContext.useEffect upon userBirds change')
+            console.log(`userBirds.length: ${userBirds.length}`)
+            console.log(`userBirds[0]: ${JSON.stringify(userBirds[0])}`)
+                
+            // writeUserBirds(userBirds);
+            
+        }
+        
+    }, [userBirds]);
 
     async function getBirdsForUser() {
-        setUserBirds(await getBirdsFromJsonFile());
+        console.log(`user.uid: ${user!.uid}`);
+        const result = await getUserBirdsFromDB(user!.uid);
+        console.log(`result after getUserBirdsFromDB: ${JSON.stringify(result)}`)
+        if (result) {
+            setUserBirds(result.userBirds)
+            console.log(`just tried to setUserBirds, userBirds[0]: ${JSON.stringify(userBirds![0])}`)
+        } else { // result is null, meaning userBirds are not already in db
+            setUserBirds(await getBirdsFromJsonFile(user!.uid));
+            if (userBirds) {
+                writeUserBirds(userBirds);
+            } else {
+                console.log(`getBirdsFromJsonFile failed to save userBirds to state variable`)
+            }
+        }
     }
 
     useEffect(() => {
@@ -86,26 +83,15 @@ export function UserContextProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (user) {
-            console.log(`USER CHANGED: ${JSON.stringify(user)}`)
+            console.log(`USER: ${JSON.stringify(user)}`)
             if (!userBirds) {
-                getBirdsForUser();
+                console.log(`doesn't think there are userBirds`)
+                getBirdsForUser().then(() => console.log(`user birds after it all: ${JSON.stringify(userBirds![0])}`))
+            } else {
+                console.log(`user birds are here already! ${JSON.stringify(userBirds[0])}`);
             }
-            // findUser(user);
-            // if (!userBirds) {
-            //     getBirdsForUser();
-            // }
-            // console.log(`user settings after find user: ${JSON.stringify(userSettings)}`);
         }
     }, [user])
-
-    // async function findUser(user: User | null) {
-    //     console.log(`userContext.findUser`);
-    //     if (user != null) {
-    //         setUserBirds(await findUserBirds(user.uid));
-    //     } else {
-    //         setUserBirds([]);
-    //     }
-    // }
 
     return (
         <UserContext.Provider value={{ user, userBirds }}> {/*, userSettings, saveUserSettings*/}
@@ -114,12 +100,15 @@ export function UserContextProvider({ children }: { children: ReactNode }) {
     );
 }
 
-async function findUserBirds(uid: string) {
+async function getUserBirdsFromDB(uid: string) {
     console.log(`userContext.findUserBirds`)
     const docRef = doc(db, "users", uid);
     const docSnap = await getDoc(docRef);
+
     if (docSnap.exists()) {
+        console.log(`docSnap does exist`)
         const data = docSnap.data();
+        console.log(`just grabbed this data from the db: ${JSON.stringify(data.userBirds[0])}`)
         return {
             userBirds: data.userBirds
         };
@@ -128,15 +117,14 @@ async function findUserBirds(uid: string) {
     }
 }
 
-// function writeUserSettings(userSettings: UserSettings) {
-//     console.log(`userContext.writeUserSettings`);
-//     setDoc(doc(db, 'users', userSettings.id), {
-//         occupation: userSettings?.occupation,
-//         organization: userSettings?.organization,
-//         linkedin: userSettings.linkedin,
-//         github: userSettings.github
-//     });
-// }
+async function writeUserBirds(userBirds: Bird[]) {
+    console.log(`userContext.writeUserBirds`);
+    await setDoc(doc(db, 'users', userBirds[0].userId), {userBirds})
+    // const parentDocRef = doc(db, 'users', userBirds[0].userId);
+    // userBirds.forEach((bird) => {
+    //     setDoc(doc(parentDocRef, 'userBirds', bird.scientificName), {bird});
+    // });
+}
 
 export const googleSignIn = () => {
     console.log(`userContext.googleSignIn`);
